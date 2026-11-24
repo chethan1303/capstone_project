@@ -1,0 +1,67 @@
+{
+  "protocol": "stratified cross-validation",
+  "folds": 5,
+  "seed": 42,
+  "dataset_samples": 48,
+  "class_counts": {
+    "benign": 24,
+    "prompt_injection": 24
+  },
+  "evaluation_scope": "Single-turn synthetic text samples with empty conversation history; no LLM calls or defense actions.",
+  "environment": {
+    "python": "3.11.9",
+    "scikit_learn": "1.9.1"
+  },
+  "baseline_definition": "Existing DetectionEngine rule and heuristic detector; no mitigation.",
+  "detection_only_definition": "TF-IDF word unigram/bigram logistic-regression classifier; no mitigation.",
+  "injection_success_definition": "Observed end-to-end success requires human-adjudicated outcomes. Without outcome annotations, injection_success_rate is null; injection_pass_through_rate is only the detector false-negative rate.",
+  "metrics": {
+    "baseline": {
+      "accuracy": 0.6042,
+      "precision": 1.0,
+      "recall": 0.2083,
+      "f1": 0.3448,
+      "fpr": 0.0,
+      "injection_pass_through_rate": 0.7917,
+      "injection_success_rate": null,
+      "injection_success_samples": 0,
+      "latency_ms": {
+        "mean": 0.2912,
+        "p50": 0.2395,
+        "p95": 0.3829
+      },
+      "fit_latency_ms_mean": 0.0,
+      "samples": 48,
+      "confusion_matrix": {
+        "true_positive": 5,
+        "false_positive": 0,
+        "false_negative": 19,
+        "true_negative": 24
+      }
+    },
+    "detection_only": {
+      "accuracy": 0.8958,
+      "precision": 0.8276,
+      "recall": 1.0,
+      "f1": 0.9057,
+      "fpr": 0.2083,
+      "injection_pass_through_rate": 0.0,
+      "injection_success_rate": null,
+      "injection_success_samples": 0,
+      "latency_ms": {
+        "mean": 1.2355,
+        "p50": 1.1795,
+        "p95": 1.6939
+      },
+      "fit_latency_ms_mean": 9.828,
+      "samples": 48,
+      "confusion_matrix": {
+        "true_positive": 24,
+        "false_positive": 5,
+        "false_negative": 0,
+        "true_negative": 19
+      }
+    }
+  },
+  "dataset_sha256": "7db8bed7924b96c38ba61a3529df7da0bcbf59fa24b1159aa072e76518d71c68"
+}
