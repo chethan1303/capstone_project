@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from pydantic import ValidationError
@@ -6,7 +7,7 @@ from pydantic import ValidationError
 from routes.auth import RegisterRequest
 from routes.chat import ChatRequest
 from routes.auth import _login
-from services.auth_service import get_current_user
+from services.auth_service import get_current_chat_user, get_current_user
 from fastapi import HTTPException
 from unittest.mock import patch
 
@@ -102,6 +103,15 @@ class AuthValidationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(raised.exception.status_code, 401)
         verify_password.assert_not_called()
+
+    async def test_analysts_can_access_chat_but_unrecognized_roles_cannot(self):
+        analyst = SimpleNamespace(role="analyst")
+        self.assertIs(await get_current_chat_user(analyst), analyst)
+
+        with self.assertRaises(HTTPException) as raised:
+            await get_current_chat_user(SimpleNamespace(role="service"))
+
+        self.assertEqual(raised.exception.status_code, 403)
 
 
 if __name__ == "__main__":

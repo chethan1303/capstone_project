@@ -27,6 +27,8 @@ class Message(BaseModel):
     detection_result: Optional[DetectionSignals] = None
     risk_score_after: Optional[float] = None
     defense_action: Optional[str] = None
+    prompt_tokens: Optional[int] = Field(default=None, ge=0)
+    completion_tokens: Optional[int] = Field(default=None, ge=0)
 
 
 class RiskSnapshot(BaseModel):

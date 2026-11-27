@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8001/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -175,6 +175,16 @@ export async function getAnalystConversationDetail(sessionId) {
 
 export async function getAnalystSecurityEvents(params = {}) {
   const response = await api.get('/analyst/security-events', { params });
+  return response.data;
+}
+
+export async function getAnalystFlaggedConversations(params = {}) {
+  const response = await api.get('/analyst/flagged-conversations', { params });
+  return response.data;
+}
+
+export async function getAnalystProfiles(params = {}) {
+  const response = await api.get('/analyst/profiles', { params });
   return response.data;
 }
 

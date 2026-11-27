@@ -6,6 +6,9 @@ import Conversations from './pages/Conversations'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminUsers from './pages/AdminUsers'
 import AnalystDashboard from './pages/AnalystDashboard'
+import AnalystEventReview from './pages/AnalystEventReview'
+import AnalystProfileAnalysis from './pages/AnalystProfileAnalysis'
+import AnalystReports from './pages/AnalystReports'
 
 function homeForRole(role) {
   if (role === 'admin') return '/admin'
@@ -45,12 +48,15 @@ function PublicRoute({ children }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<PublicRoute><Login role="user" /></PublicRoute>} />
-      <Route path="/admin-login" element={<PublicRoute><Login role="admin" /></PublicRoute>} />
-      <Route path="/analyst-login" element={<PublicRoute><Login role="analyst" /></PublicRoute>} />
-      <Route path="/chat" element={<ProtectedRoute roles={['user', 'admin']}><Chat /></ProtectedRoute>} />
-      <Route path="/conversations" element={<ProtectedRoute roles={['user', 'admin']}><Conversations /></ProtectedRoute>} />
+      <Route path="/login" element={<PublicRoute><Login key="user" role="user" /></PublicRoute>} />
+      <Route path="/admin-login" element={<PublicRoute><Login key="admin" role="admin" /></PublicRoute>} />
+      <Route path="/analyst-login" element={<PublicRoute><Login key="analyst" role="analyst" /></PublicRoute>} />
+      <Route path="/chat" element={<ProtectedRoute roles={['user', 'analyst', 'admin']}><Chat /></ProtectedRoute>} />
+      <Route path="/conversations" element={<ProtectedRoute roles={['user', 'analyst', 'admin']}><Conversations /></ProtectedRoute>} />
       <Route path="/analyst" element={<ProtectedRoute roles={['analyst', 'admin']}><AnalystDashboard /></ProtectedRoute>} />
+      <Route path="/analyst/events" element={<ProtectedRoute roles={['analyst', 'admin']}><AnalystEventReview /></ProtectedRoute>} />
+      <Route path="/analyst/profiles" element={<ProtectedRoute roles={['analyst', 'admin']}><AnalystProfileAnalysis /></ProtectedRoute>} />
+      <Route path="/analyst/reports" element={<ProtectedRoute roles={['analyst', 'admin']}><AnalystReports /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute roles={['admin']}><AdminDashboard /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute roles={['admin']}><AdminUsers /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/login" replace />} />

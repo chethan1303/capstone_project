@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Send, Plus, AlertTriangle, Shield, Gauge, ChevronDown } from 'lucide-react'
 import AppShell from '../components/AppShell'
+import { useAuth } from '../context/AuthContext'
 import { getChatHistory, sendMessage } from '../services/api'
 
 const makeSessionId = () => crypto.randomUUID()
 
 export default function Chat() {
+  const { user } = useAuth()
+  const canViewAnalysis = user?.role === 'analyst' || user?.role === 'admin'
   const [sessionId, setSessionId] = useState(() => localStorage.getItem('activeSession'))
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -40,7 +43,7 @@ export default function Chat() {
         if (!active) return
         setMessages(history)
         const latestUser = [...history].reverse().find((message) => message.role === 'user')
-        if (latestUser?.risk_score_after != null) {
+        if (canViewAnalysis && latestUser?.risk_score_after != null) {
           setAssessment({
             risk_level: latestUser.risk_score_after >= 0.8
               ? 'critical'
@@ -71,7 +74,7 @@ export default function Chat() {
       })
       .finally(() => { if (active) setLoadingHistory(false) })
     return () => { active = false }
-  }, [sessionId])
+  }, [sessionId, canViewAnalysis])
 
   useEffect(() => {
     if (shouldAutoScrollRef.current) {
@@ -107,7 +110,7 @@ export default function Chat() {
     try {
       const result = await sendMessage(sessionId || makeSessionId(), message)
       setSessionId(result.session_id)
-      setAssessment(result)
+      setAssessment(canViewAnalysis ? result : null)
       setMessages((current) => [...current, { role: 'assistant', content: result.response }])
     } catch (err) {
       setMessages((current) => [...current, { role: 'assistant', content: err.response?.data?.detail || 'Unable to reach the honeypot service.' }])
@@ -125,7 +128,7 @@ export default function Chat() {
 
   return (
     <AppShell>
-      <div className="chat-layout">
+      <div className={`chat-layout ${canViewAnalysis ? '' : 'chat-layout--without-analysis'}`}>
         <section className="chat-panel">
           <header className="page-header">
             <div>
@@ -133,13 +136,15 @@ export default function Chat() {
               <h1>CorpAssist</h1>
             </div>
             <div className="header-actions">
-              <button
-                className="secondary-button mobile-risk-button"
-                onClick={() => setRiskPanelOpen((open) => !open)}
-                aria-expanded={riskPanelOpen}
-              >
-                <Gauge size={16} /> Risk <ChevronDown size={14} />
-              </button>
+              {canViewAnalysis && (
+                <button
+                  className="secondary-button mobile-risk-button"
+                  onClick={() => setRiskPanelOpen((open) => !open)}
+                  aria-expanded={riskPanelOpen}
+                >
+                  <Gauge size={16} /> Risk <ChevronDown size={14} />
+                </button>
+              )}
               <button className="secondary-button" onClick={newConversation}><Plus size={16} /> New chat</button>
             </div>
           </header>
@@ -152,7 +157,9 @@ export default function Chat() {
               <div className="empty-chat">
                 <div className="brand-mark large"><Shield size={24} /></div>
                 <h2>Protected workspace</h2>
-                <p>Messages are analyzed for prompt injection signals before the honeypot response is generated.</p>
+                <p>{canViewAnalysis
+                  ? 'Messages are analyzed for prompt injection signals before the honeypot response is generated.'
+                  : 'Start a conversation to chat with CorpAssist.'}</p>
               </div>
             )}
             {!loadingHistory && messages.map((message, index) => (
@@ -185,37 +192,39 @@ export default function Chat() {
           </form>
         </section>
 
-        <aside className={`risk-panel ${riskPanelOpen ? 'open' : ''}`}>
-          <div className="panel-heading">
-            <Gauge size={18} />
-            <h2>Risk assessment</h2>
-          </div>
-          {assessment ? (
-            <>
-              <div className={`risk-gauge ${assessment.risk_level}`}>
-                <strong>{assessment.risk_score.toFixed(2)}</strong>
-                <span>{assessment.risk_level}</span>
-              </div>
-              <dl className="risk-details">
-                <div><dt>Turn</dt><dd>{assessment.turn_number}</dd></div>
-                <div><dt>Defense</dt><dd>{assessment.defense_action}</dd></div>
-                <div><dt>Status</dt><dd>{assessment.is_suspicious ? 'Suspicious' : 'Normal'}</dd></div>
-              </dl>
-              {(assessment.contributing_factors?.length > 0 || assessment.detection_explanation) && (
-                <div className="signal-box">
-                  <h3><AlertTriangle size={15} /> Triggered signals</h3>
-                  {assessment.detection_explanation && <p>{assessment.detection_explanation}</p>}
-                  {assessment.contributing_factors?.map((factor) => <span key={factor}>{factor}</span>)}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="risk-empty">
-              <Shield size={32} />
-              <p>Risk details will appear after the next message.</p>
+        {canViewAnalysis && (
+          <aside className={`risk-panel ${riskPanelOpen ? 'open' : ''}`}>
+            <div className="panel-heading">
+              <Gauge size={18} />
+              <h2>Risk assessment</h2>
             </div>
-          )}
-        </aside>
+            {assessment ? (
+              <>
+                <div className={`risk-gauge ${assessment.risk_level}`}>
+                  <strong>{assessment.risk_score.toFixed(2)}</strong>
+                  <span>{assessment.risk_level}</span>
+                </div>
+                <dl className="risk-details">
+                  <div><dt>Turn</dt><dd>{assessment.turn_number}</dd></div>
+                  <div><dt>Defense</dt><dd>{assessment.defense_action}</dd></div>
+                  <div><dt>Status</dt><dd>{assessment.is_suspicious ? 'Suspicious' : 'Normal'}</dd></div>
+                </dl>
+                {(assessment.contributing_factors?.length > 0 || assessment.detection_explanation) && (
+                  <div className="signal-box">
+                    <h3><AlertTriangle size={15} /> Triggered signals</h3>
+                    {assessment.detection_explanation && <p>{assessment.detection_explanation}</p>}
+                    {assessment.contributing_factors?.map((factor) => <span key={factor}>{factor}</span>)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="risk-empty">
+                <Shield size={32} />
+                <p>Risk details will appear after the next message.</p>
+              </div>
+            )}
+          </aside>
+        )}
       </div>
     </AppShell>
   )

@@ -24,7 +24,7 @@ export default function Conversations() {
 
   const remove = async (sessionId) => {
     const confirmed = window.confirm(
-      'Remove this chat from your history? Its messages and security analysis will be retained for administrators.',
+      'Remove this chat from your history? Its messages and security analysis will be retained for analysts and administrators.',
     )
     if (!confirmed) return
 
@@ -56,7 +56,7 @@ export default function Conversations() {
         </header>
 
         <p className="history-retention-note">
-          Removing a chat hides it from your history. Its messages, risk analysis, and security events remain stored for administrators.
+          Removing a chat hides it from your history. Its messages, risk analysis, and security events remain stored for analysts and administrators.
         </p>
         {error && <div className="form-error conversation-error" role="alert">{error}</div>}
 

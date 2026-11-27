@@ -80,8 +80,8 @@ async def get_current_admin(user: User = Depends(get_current_user)) -> User:
 
 
 async def get_current_chat_user(user: User = Depends(get_current_user)) -> User:
-    """Allow honeypot interactions only for standard users and administrators."""
-    if user.role not in {"user", "admin"}:
+    """Allow honeypot interactions for standard users, analysts, and admins."""
+    if user.role not in {"user", "analyst", "admin"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account cannot access the honeypot chat",

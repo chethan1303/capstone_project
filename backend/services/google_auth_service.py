@@ -16,6 +16,20 @@ from models.user import User
 from services.auth_service import hash_password
 
 
+def _google_display_name(claims: dict, email: str) -> str:
+    for key in ("name", "given_name"):
+        value = claims.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:120]
+    return email.split("@", 1)[0].replace(".", " ").replace("_", " ")[:120]
+
+
+async def _sync_google_display_name(user: User, display_name: str) -> None:
+    if user.display_name != display_name:
+        user.display_name = display_name
+        await user.save()
+
+
 async def authenticate_google_credential(credential: str) -> User:
     """Verify Google's signed ID token and return an active standard user."""
     if not settings.GOOGLE_CLIENT_ID:
@@ -63,6 +77,7 @@ async def authenticate_google_credential(credential: str) -> User:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="This account cannot sign in with Google",
             )
+        await _sync_google_display_name(user, _google_display_name(claims, email))
         return user
 
     normalized_email = email.strip().lower()
@@ -82,6 +97,7 @@ async def authenticate_google_credential(credential: str) -> User:
     user = User(
         username=username,
         email=normalized_email,
+        display_name=_google_display_name(claims, normalized_email),
         hashed_password=hash_password(secrets.token_urlsafe(32)),
         role="user",
         google_subject=subject,
@@ -100,5 +116,9 @@ async def authenticate_google_credential(credential: str) -> User:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="This account cannot sign in with Google",
             ) from exc
+        await _sync_google_display_name(
+            existing_google_user,
+            _google_display_name(claims, normalized_email),
+        )
         return existing_google_user
     return user

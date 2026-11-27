@@ -17,6 +17,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from config import settings
 from models.conversation import Conversation
+from services.conversation_metrics import calculate_conversation_metrics
 
 
 def _csv_safe(value: object) -> str:
@@ -36,14 +37,31 @@ def build_csv(conversations: List[Conversation]) -> bytes:
         "risk_level",
         "current_risk_score",
         "detection_count",
+        "total_messages",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "token_usage_complete",
+        "message_text_bytes",
         "role",
         "message_timestamp",
         "message_content",
         "message_risk_score",
         "defense_action",
         "detection_signals",
+        "message_prompt_tokens",
+        "message_completion_tokens",
+        "message_text_bytes",
     ])
     for conversation in conversations:
+        metrics = calculate_conversation_metrics(conversation)
+        session_metrics = [
+            metrics.prompt_tokens,
+            metrics.completion_tokens,
+            metrics.total_tokens,
+            metrics.token_usage_complete,
+            metrics.message_text_bytes,
+        ]
         if not conversation.messages:
             writer.writerow([
                 _csv_safe(conversation.session_id),
@@ -52,7 +70,19 @@ def build_csv(conversations: List[Conversation]) -> bytes:
                 _csv_safe(conversation.risk_level),
                 conversation.current_risk_score,
                 conversation.detection_count,
+                conversation.total_messages,
+                *session_metrics,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
             ])
+            continue
         for message in conversation.messages:
             signals = message.detection_result.model_dump() if message.detection_result else {}
             writer.writerow([
@@ -62,12 +92,17 @@ def build_csv(conversations: List[Conversation]) -> bytes:
                 _csv_safe(conversation.risk_level),
                 conversation.current_risk_score,
                 conversation.detection_count,
+                conversation.total_messages,
+                *session_metrics,
                 _csv_safe(message.role),
                 message.timestamp.isoformat(),
                 _csv_safe(message.content),
                 message.risk_score_after,
                 _csv_safe(message.defense_action),
                 _csv_safe(str(signals)),
+                message.prompt_tokens,
+                message.completion_tokens,
+                len(message.content.encode("utf-8")),
             ])
     return output.getvalue().encode("utf-8-sig")
 
@@ -83,6 +118,18 @@ def build_pdf(description: str, conversations: List[Conversation]) -> bytes:
         bottomMargin=0.6 * inch,
     )
     styles = getSampleStyleSheet()
+    metrics_by_conversation = [
+        calculate_conversation_metrics(conversation)
+        for conversation in conversations
+    ]
+    complete_token_sessions = [
+        metrics.total_tokens
+        for metrics in metrics_by_conversation
+        if metrics.token_usage_complete
+    ]
+    total_message_text_bytes = sum(
+        metrics.message_text_bytes for metrics in metrics_by_conversation
+    )
     story = [
         Paragraph("PI-EWS Security Analysis Report", styles["Title"]),
         Spacer(1, 8),
@@ -92,24 +139,54 @@ def build_pdf(description: str, conversations: List[Conversation]) -> bytes:
             styles["BodyText"],
         ),
         Paragraph(f"<b>Conversations:</b> {len(conversations)}", styles["BodyText"]),
+        Paragraph(
+            "<b>Provider-reported LLM tokens:</b> "
+            f"{sum(complete_token_sessions):,} across "
+            f"{len(complete_token_sessions)} fully tracked conversation(s)",
+            styles["BodyText"],
+        ),
+        Paragraph(
+            f"<b>Message text size:</b> {total_message_text_bytes:,} bytes",
+            styles["BodyText"],
+        ),
         Spacer(1, 14),
     ]
 
-    table_data = [["Session", "Risk", "Score", "Detections", "Messages", "Status"]]
-    for conversation in conversations:
+    table_data = [[
+        "Session",
+        "Risk",
+        "Score",
+        "Detections",
+        "Messages",
+        "LLM tokens",
+        "Text KB",
+        "Status",
+    ]]
+    for conversation, metrics in zip(conversations, metrics_by_conversation):
         table_data.append([
             Paragraph(escape(conversation.session_id), styles["BodyText"]),
             escape(conversation.risk_level),
             f"{conversation.current_risk_score:.3f}",
             str(conversation.detection_count),
             str(conversation.total_messages),
+            str(metrics.total_tokens) if metrics.token_usage_complete else "Not tracked",
+            f"{metrics.message_text_bytes / 1024:.1f}",
             escape(conversation.status),
         ])
 
     table = Table(
         table_data,
         repeatRows=1,
-        colWidths=[2.0 * inch, 0.7 * inch, 0.6 * inch, 0.75 * inch, 0.65 * inch, 0.8 * inch],
+        colWidths=[
+            1.65 * inch,
+            0.55 * inch,
+            0.55 * inch,
+            0.65 * inch,
+            0.55 * inch,
+            0.75 * inch,
+            0.55 * inch,
+            0.75 * inch,
+        ],
     )
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#18382d")),

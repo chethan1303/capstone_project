@@ -5,11 +5,28 @@ Integrates with Groq's OpenAI-compatible chat completion API.
 Includes a mock service for testing without an API key.
 """
 
-from typing import List, Dict, Optional
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 import httpx
 
 from config import settings
+
+
+@dataclass(frozen=True)
+class LLMResult:
+    content: str
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+
+
+def _read_token_count(usage: object, key: str) -> Optional[int]:
+    if not isinstance(usage, dict):
+        return None
+    value = usage.get(key)
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
 
 
 class LLMService:
@@ -20,7 +37,7 @@ class LLMService:
         system_prompt: str,
         conversation_history: List[Dict[str, str]],
         defense_additions: Optional[str] = None,
-    ) -> str:
+    ) -> LLMResult:
         """Generate a response from the Gemini API.
 
         Args:
@@ -29,7 +46,7 @@ class LLMService:
             defense_additions: Extra system instructions from the defense engine.
 
         Returns:
-            The model's text response.
+            The model response and provider-reported token usage.
         """
         # Build combined system instruction
         full_system = system_prompt
@@ -62,19 +79,34 @@ class LLMService:
                 data = response.json()
 
                 choices = data.get("choices", [])
+                usage = data.get("usage")
+                prompt_tokens = _read_token_count(usage, "prompt_tokens")
+                completion_tokens = _read_token_count(usage, "completion_tokens")
                 if choices:
                     content = choices[0].get("message", {}).get("content")
                     if content:
-                        return content
+                        return LLMResult(
+                            content=content,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                        )
 
-                return "I'm having trouble responding right now. Please try again."
+                return LLMResult(
+                    content="I'm having trouble responding right now. Please try again.",
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
 
         except httpx.HTTPStatusError as e:
             print(f"LLM API error: {e.response.status_code} — {e.response.text}")
-            return "I apologize, I'm experiencing technical difficulties. Please try again shortly."
+            return LLMResult(
+                content="I apologize, I'm experiencing technical difficulties. Please try again shortly."
+            )
         except Exception as e:
             print(f"LLM service error: {e}")
-            return "I apologize, I'm experiencing technical difficulties. Please try again shortly."
+            return LLMResult(
+                content="I apologize, I'm experiencing technical difficulties. Please try again shortly."
+            )
 
 
 class MockLLMService:
@@ -112,10 +144,10 @@ class MockLLMService:
         system_prompt: str,
         conversation_history: List[Dict[str, str]],
         defense_additions: Optional[str] = None,
-    ) -> str:
+    ) -> LLMResult:
         response = self._RESPONSES[self._index % len(self._RESPONSES)]
         self._index += 1
-        return response
+        return LLMResult(content=response, prompt_tokens=0, completion_tokens=0)
 
 
 def get_llm_service() -> LLMService | MockLLMService:

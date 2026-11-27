@@ -81,6 +81,8 @@ class ConversationManager:
         detection_signals: Optional[DetectionSignals] = None,
         risk_score: Optional[float] = None,
         defense_action: Optional[str] = None,
+        prompt_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
     ) -> Conversation:
         """Append a message to the conversation and persist.
 
@@ -102,6 +104,8 @@ class ConversationManager:
             detection_result=detection_signals,
             risk_score_after=risk_score,
             defense_action=defense_action,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
         )
         conversation.messages.append(msg)
         conversation.total_messages += 1

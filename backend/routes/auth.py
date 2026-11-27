@@ -9,6 +9,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, field_validator
 from pymongo.errors import DuplicateKeyError
 import re
+from typing import Optional
 
 from models.user import User
 from services.auth_service import (
@@ -67,6 +68,7 @@ class TokenResponse(BaseModel):
 
 class UserResponse(BaseModel):
     username: str
+    display_name: Optional[str] = None
     email: str
     role: str
 
@@ -107,7 +109,12 @@ async def register(body: RegisterRequest):
             status_code=status.HTTP_409_CONFLICT,
             detail="Username or email already registered",
         ) from exc
-    return UserResponse(username=user.username, email=user.email, role=user.role)
+    return UserResponse(
+        username=user.username,
+        display_name=user.display_name,
+        email=user.email,
+        role=user.role,
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -169,4 +176,9 @@ async def _login(form: OAuth2PasswordRequestForm, required_role: str) -> TokenRe
 @router.get("/me", response_model=UserResponse)
 async def me(user: User = Depends(get_current_user)):
     """Return the currently authenticated user's profile."""
-    return UserResponse(username=user.username, email=user.email, role=user.role)
+    return UserResponse(
+        username=user.username,
+        display_name=user.display_name,
+        email=user.email,
+        role=user.role,
+    )

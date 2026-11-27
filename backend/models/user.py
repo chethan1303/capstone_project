@@ -17,6 +17,7 @@ class User(Document):
 
     username: Indexed(str, unique=True)
     email: str
+    display_name: Optional[str] = Field(default=None, max_length=120)
     hashed_password: str
     role: str = Field(default="user", description="'user', 'analyst', or 'admin'")
     google_subject: Optional[str] = None

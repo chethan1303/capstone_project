@@ -66,6 +66,7 @@ class GoogleAuthTests(unittest.IsolatedAsyncioTestCase):
                     "sub": "google-subject",
                     "email": "Person@Example.com",
                     "email_verified": True,
+                    "name": "Person Example",
                     "role": "admin",
                 },
             ),
@@ -85,8 +86,40 @@ class GoogleAuthTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(user.role, "user")
         self.assertEqual(user.email, "person@example.com")
+        self.assertEqual(user.display_name, "Person Example")
         self.assertEqual(user.google_subject, "google-subject")
         insert.assert_awaited_once()
+
+    async def test_existing_google_user_display_name_is_updated_from_verified_claims(self):
+        user = SimpleNamespace(
+            is_active=True,
+            role="user",
+            display_name=None,
+            save=AsyncMock(),
+        )
+        with (
+            patch("services.google_auth_service.settings.GOOGLE_CLIENT_ID", "client-id"),
+            patch(
+                "services.google_auth_service.run_in_threadpool",
+                new_callable=AsyncMock,
+                return_value={
+                    "sub": "google-subject",
+                    "email": "person@example.com",
+                    "email_verified": True,
+                    "name": "Person Example",
+                },
+            ),
+            patch(
+                "services.google_auth_service.User.find_one",
+                new_callable=AsyncMock,
+                return_value=user,
+            ),
+        ):
+            result = await authenticate_google_credential("credential")
+
+        self.assertIs(result, user)
+        self.assertEqual(user.display_name, "Person Example")
+        user.save.assert_awaited_once()
 
     async def test_existing_email_is_not_automatically_linked(self):
         existing_user = SimpleNamespace(username="local-user", role="user")
@@ -157,7 +190,12 @@ class GoogleAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.status_code, 503)
 
     async def test_duplicate_google_signup_returns_the_created_standard_account(self):
-        created_account = SimpleNamespace(is_active=True, role="user")
+        created_account = SimpleNamespace(
+            is_active=True,
+            role="user",
+            display_name="person",
+            save=AsyncMock(),
+        )
         with (
             patch("services.google_auth_service.settings.GOOGLE_CLIENT_ID", "client-id"),
             patch(

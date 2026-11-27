@@ -5,6 +5,8 @@ Dashboard stats, conversation management, security events, and analytics
 for admin users.
 """
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Literal, Optional
 import re
@@ -13,6 +15,7 @@ from models.user import User
 from models.conversation import Conversation
 from models.security_event import SecurityEvent
 from services.auth_service import get_current_admin, hash_password
+from services.conversation_metrics import calculate_conversation_metrics
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -125,6 +128,7 @@ async def list_all_conversations(
                 "detection_count": c.detection_count,
                 "created_at": c.created_at.isoformat(),
                 "updated_at": c.updated_at.isoformat(),
+                **asdict(calculate_conversation_metrics(c)),
             }
             for c in convos
         ],
@@ -148,6 +152,7 @@ async def get_conversation_detail(
         .to_list()
     )
 
+    metrics = calculate_conversation_metrics(convo)
     return {
         "session_id": convo.session_id,
         "user_id": convo.user_id,
@@ -160,6 +165,7 @@ async def get_conversation_detail(
         "detection_count": convo.detection_count,
         "created_at": convo.created_at.isoformat(),
         "updated_at": convo.updated_at.isoformat(),
+        **asdict(metrics),
         "messages": [
             {
                 "role": m.role,
@@ -168,6 +174,9 @@ async def get_conversation_detail(
                 "detection_result": m.detection_result.model_dump() if m.detection_result else None,
                 "risk_score_after": m.risk_score_after,
                 "defense_action": m.defense_action,
+                "prompt_tokens": m.prompt_tokens,
+                "completion_tokens": m.completion_tokens,
+                "message_text_bytes": len(m.content.encode("utf-8")),
             }
             for m in convo.messages
         ],

@@ -54,19 +54,19 @@ class MessageOut(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     session_id: str
-    risk_level: str
-    risk_score: float
-    turn_number: int
-    defense_action: str
-    is_suspicious: bool
-    contributing_factors: List[str] = []
-    detection_explanation: str = ""
+    risk_level: Optional[str] = None
+    risk_score: Optional[float] = None
+    turn_number: Optional[int] = None
+    defense_action: Optional[str] = None
+    is_suspicious: Optional[bool] = None
+    contributing_factors: Optional[List[str]] = None
+    detection_explanation: Optional[str] = None
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
-@router.post("", response_model=ChatResponse)
+@router.post("", response_model=ChatResponse, response_model_exclude_none=True)
 async def chat(body: ChatRequest, user: User = Depends(get_current_chat_user)):
     """Main chat pipeline.
 
@@ -104,6 +104,13 @@ async def chat(body: ChatRequest, user: User = Depends(get_current_chat_user)):
     # 5. Generate response
     if defense_policy.action == "block":
         bot_response = defense_policy.response_override
+        if bot_response is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Blocking policy did not provide a response",
+            )
+        prompt_tokens = 0
+        completion_tokens = 0
     else:
         # Build history for LLM
         history = [
@@ -113,11 +120,14 @@ async def chat(body: ChatRequest, user: User = Depends(get_current_chat_user)):
         history.append({"role": "user", "content": body.message})
 
         llm = get_llm_service()
-        bot_response = await llm.generate_response(
+        llm_result = await llm.generate_response(
             system_prompt=settings.HONEYPOT_SYSTEM_PROMPT,
             conversation_history=history,
             defense_additions=defense_policy.modified_system_prompt,
         )
+        bot_response = llm_result.content
+        prompt_tokens = llm_result.prompt_tokens
+        completion_tokens = llm_result.completion_tokens
 
     # 6. Persist user message + risk update + bot message
     conversation = await conversation_mgr.add_message(
@@ -135,6 +145,8 @@ async def chat(body: ChatRequest, user: User = Depends(get_current_chat_user)):
         conversation=conversation,
         role="assistant",
         content=bot_response,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
     )
 
     # 7. Log security event if warranted
@@ -159,16 +171,17 @@ async def chat(body: ChatRequest, user: User = Depends(get_current_chat_user)):
         )
         await event.insert()
 
+    can_view_analysis = user.role in {"analyst", "admin"}
     return ChatResponse(
         response=bot_response,
         session_id=body.session_id,
-        risk_level=risk_assessment.level,
-        risk_score=risk_assessment.current_score,
-        turn_number=risk_assessment.turn_number,
-        defense_action=defense_policy.action,
-        is_suspicious=detection_result.is_suspicious,
-        contributing_factors=risk_assessment.contributing_factors,
-        detection_explanation=detection_result.explanation,
+        risk_level=risk_assessment.level if can_view_analysis else None,
+        risk_score=risk_assessment.current_score if can_view_analysis else None,
+        turn_number=risk_assessment.turn_number if can_view_analysis else None,
+        defense_action=defense_policy.action if can_view_analysis else None,
+        is_suspicious=detection_result.is_suspicious if can_view_analysis else None,
+        contributing_factors=risk_assessment.contributing_factors if can_view_analysis else None,
+        detection_explanation=detection_result.explanation if can_view_analysis else None,
     )
 
 
@@ -180,14 +193,21 @@ async def get_history(session_id: str, user: User = Depends(get_current_chat_use
         user_id=str(user.id),
     )
     messages = conversation.messages
-    return [
-        {
-            "role": m.role,
-            "content": m.content,
-            "timestamp": m.timestamp.isoformat(),
-            "detection_result": m.detection_result.model_dump() if m.detection_result else None,
-            "risk_score_after": m.risk_score_after,
-            "defense_action": m.defense_action,
+    can_view_analysis = user.role in {"analyst", "admin"}
+    result = []
+    for message in messages:
+        item: dict[str, object] = {
+            "role": message.role,
+            "content": message.content,
+            "timestamp": message.timestamp.isoformat(),
         }
-        for m in messages
-    ]
+        if can_view_analysis:
+            item.update({
+                "detection_result": message.detection_result.model_dump() if message.detection_result else None,
+                "risk_score_after": message.risk_score_after,
+                "defense_action": message.defense_action,
+                "prompt_tokens": message.prompt_tokens,
+                "completion_tokens": message.completion_tokens,
+            })
+        result.append(item)
+    return result
